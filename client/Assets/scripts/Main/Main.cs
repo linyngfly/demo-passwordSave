@@ -20,6 +20,7 @@ public class Main : MonoBehaviour
     RectTransform baseDirRect = null;
     int maxDepth = 0;
     float resetTime = 0f;
+    int connectSvrTimes = 0;
 
     private void Awake()
     {
@@ -48,7 +49,7 @@ public class Main : MonoBehaviour
             {
                 baseDirData = JsonUtility.FromJson<DirData>(PlayerData.DecryData(data));
             }
-            InitData();
+            InitData(true);
 
         }
         else
@@ -57,14 +58,38 @@ public class Main : MonoBehaviour
             SocketWait.instance.Show("连接服务器中");
             SocketClient.OnOpen(SVR_OnConnectorOpen);
             SocketClient.OnClose(SVR_OnConnectorClose);
-            SocketClient.Connect(PlayerData.host, PlayerData.port);
-
+            Connect_svr();
         }
     }
 
 
-    void InitData()
+    void InitData(bool isChange)
     {
+        Debug.Log(isChange);
+        if (!isChange)
+        {
+            return;
+        }
+
+
+        foreach (Transform child in baseDirTrsm)
+        {
+            Destroy(child.gameObject);
+        }
+        if (FilePanel.instance != null)
+        {
+            Destroy(FilePanel.instance.gameObject);
+        }
+        if (FileInfoPanel.instance != null)
+        {
+            Destroy(FileInfoPanel.instance.gameObject);
+        }
+        if (DirPanel.instance != null)
+        {
+            Destroy(DirPanel.instance.gameObject);
+        }
+
+
         for (int i = 0; i < baseDirData.dirs.Count; i++)
         {
             DirData oneDirData = baseDirData.dirs[i];
@@ -319,12 +344,46 @@ public class Main : MonoBehaviour
         data.uid = PlayerData.uid;
         data.token = PlayerData.token;
         SocketClient.SendMsg("connector.main.entry", data);
+        connectSvrTimes = 0;
+    }
+
+    /// <summary>
+    /// 连接服务器
+    /// </summary>
+    void Connect_svr()
+    {
+        Debug.Log("连接服务器");
+        SocketClient.Connect(PlayerData.host, PlayerData.port);
+    }
+
+    IEnumerator Connect_svr_later()
+    {
+        SocketWait.instance.Show("连接服务器中");
+        connectSvrTimes++;
+        yield return new WaitForSeconds(2f);
+        Connect_svr();
     }
 
     // 服务器连接失败
     void SVR_OnConnectorClose(string msg)
     {
-        SocketWait.instance.Show("服务器断开连接，请重新登录");
+        Debug.Log("connectTimes:" + connectSvrTimes);
+        if (connectSvrTimes >= 3)
+        {
+            SocketWait.instance.Show("网络错误，请重新登录");
+            StartCoroutine(BackToLogin());
+        }
+        else
+        {
+            StartCoroutine(Connect_svr_later());
+        }
+    }
+
+
+    void Wrong_data_back()
+    {
+        SocketClient.DisConnect();
+        SocketWait.instance.Show("数据错误，请重新登录");
         StartCoroutine(BackToLogin());
     }
 
@@ -333,21 +392,49 @@ public class Main : MonoBehaviour
         Proto_entry_res res = JsonUtility.FromJson<Proto_entry_res>(msg);
         if (res.code == 0)
         {
+            bool isChange = false;
             if (res.data == "")
             {
-                baseDirData = new DirData();
+                if (baseDirData == null)
+                {
+                    baseDirData = new DirData();
+                    isChange = true;
+                }
+                else if (baseDirData.files.Count != 0 || baseDirData.dirs.Count != 0)
+                {
+                    baseDirData = new DirData();
+                    isChange = true;
+                }
+                else
+                {
+                    isChange = false;
+                }
             }
             else
             {
-                baseDirData = JsonUtility.FromJson<DirData>(PlayerData.DecryData(res.data));
+                string getData = PlayerData.DecryData(res.data);
+                if (baseDirData == null)
+                {
+                    isChange = true;
+                    baseDirData = JsonUtility.FromJson<DirData>(getData);
+                }
+                else
+                {
+                    string localData = JsonUtility.ToJson(baseDirData);
+                    if (localData != getData)
+                    {
+                        isChange = true;
+                        baseDirData = JsonUtility.FromJson<DirData>(getData);
+                    }
+                }
+
             }
-            InitData();
+            InitData(isChange);
             SocketWait.instance.Hide();
         }
         else
         {
-            SocketClient.DisConnect();
-            SVR_OnConnectorClose(null);
+            Wrong_data_back();
         }
     }
 
@@ -360,8 +447,7 @@ public class Main : MonoBehaviour
         }
         else
         {
-            SocketClient.DisConnect();
-            SVR_OnConnectorClose(null);
+            Wrong_data_back();
         }
     }
 
@@ -374,13 +460,11 @@ public class Main : MonoBehaviour
         }
         else
         {
-            SocketClient.DisConnect();
-            SVR_OnConnectorClose(null);
+            Wrong_data_back();
         }
     }
     void SVR_OnKicked(string msg)
     {
-
         SocketClient.DisConnect();
         SocketWait.instance.Show("账号在其他地方登录了");
         StartCoroutine(BackToLogin());
@@ -388,17 +472,19 @@ public class Main : MonoBehaviour
 
     IEnumerator BackToLogin()
     {
-        yield return new WaitForSeconds(4f);
+        yield return new WaitForSeconds(3f);
         SceneManager.LoadScene("login");
     }
 
 
     private void OnDisable()
     {
-        SocketClient.DisConnect();
+        SocketClient.OffOpen();
+        SocketClient.OffClose();
         SocketClient.RemoveHandler("connector.main.entry");
         SocketClient.RemoveHandler("connector.main.updateData");
         SocketClient.RemoveHandler("connector.main.changePassword");
         SocketClient.RemoveHandler("onKicked");
+        SocketClient.DisConnect();
     }
 }

@@ -9,7 +9,7 @@ app.set_encodeDecodeConfig({ "decode": decode });
 
 app.configure("connector", function () {
     //"ws" for cocos creator,  "net" for unity
-    app.set("connectorConfig", { connector: "net", heartbeat: 10 });
+    app.set_connectorConfig({ connector: "net", heartbeat: 10 });
     app.set("mysql", new mysqlClient(mysqlConfig));
 });
 

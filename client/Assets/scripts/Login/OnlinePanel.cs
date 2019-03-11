@@ -167,6 +167,7 @@ public class OnlinePanel : MonoBehaviour
 
     IEnumerator LoginHttp(string _url, WWWForm _wForm)
     {
+        Debug.Log(_url);
         UnityWebRequest www = UnityWebRequest.Post(_url, _wForm);
         www.timeout = 5;
         yield return www.SendWebRequest();

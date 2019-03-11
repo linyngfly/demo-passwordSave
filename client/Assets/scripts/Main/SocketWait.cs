@@ -10,6 +10,7 @@ public class SocketWait : MonoBehaviour
     Text infoText;
     Transform rotateTrsm;
     CanvasGroup group;
+    float nowTime = 0;
 
     private void Awake()
     {
@@ -21,27 +22,26 @@ public class SocketWait : MonoBehaviour
 
     public void Show(string info)
     {
-        StopAllCoroutines();
-        group.alpha = 0;
         infoText.text = info;
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
-        StartCoroutine(ShowImg());
     }
 
-    IEnumerator ShowImg()
-    {
-        yield return new WaitForSeconds(1.5f);
-        group.alpha = 1;
-    }
 
     public void Hide()
     {
+        group.alpha = 0;
+        nowTime = 0;
         gameObject.SetActive(false);
     }
 
     private void Update()
     {
         rotateTrsm.Rotate(0, 0, 120 * Time.deltaTime);
+        nowTime += Time.deltaTime;
+        if (nowTime > 1f && group.alpha == 0)
+        {
+            group.alpha = 1;
+        }
     }
 }

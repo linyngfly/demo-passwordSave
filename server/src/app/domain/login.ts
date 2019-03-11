@@ -10,7 +10,6 @@ let app: Application;
 let mysql: mysqlClient;
 let nowConHost: string = "127.0.0.1";
 let nowConPort: number = 3000;
-let userToken: { [uid: number]: { "token": number, "timer": NodeJS.Timer } } = {} as any;
 
 let msgHandler: normalObj = {};
 msgHandler.login = function (msg: any, next: Function) {
@@ -27,19 +26,17 @@ msgHandler.login = function (msg: any, next: Function) {
             next({ "code": 2, "msg": "用户或密码错误" });
             return;
         }
-        let token = Math.floor(Math.random() * 100000);
-        let result = { "code": 0, "uid": res[0].uid, "host": nowConHost, "port": nowConPort, "token": token };
-        setToken(result.uid, token);
-        next(result);
+        let token = Math.floor(Math.random() * 10000000);
+        mysql.query("update account set token = ? where uid = ?", [token, res[0].uid], function (err: any) {
+            if (err) {
+                next({ "code": -1 });
+                return;
+            }
+            let result = { "code": 0, "uid": res[0].uid, "host": nowConHost, "port": nowConPort, "token": token };
+            next(result);
+        });
     });
 };
-
-function setToken(uid: number, token: number) {
-    let timer = setTimeout(function () {
-        delete userToken[uid];
-    }, 3000);
-    userToken[uid] = { "timer": timer, "token": token };
-}
 
 msgHandler.register = function (msg: any, next: Function) {
     mysql.query("select uid from account where username = ?", [msg.username], function (err: any, res: any) {
@@ -85,7 +82,7 @@ export function loginHttpStart(_app: Application) {
         });
         request.on("end", function () {
             let body = querystring.parse(msg) as any;
-            // console.log(body);
+            console.log(body);
             if (body && body.method && msgHandler[body.method]) {
                 msgHandler[body.method](body, callback(response));
             }
@@ -142,15 +139,4 @@ function setMinUserIp() {
     }
     nowConHost = cons[minIndex].clientHost;
     nowConPort = cons[minIndex].port;
-}
-
-export function isTokenLegal(uid: number, token: number, cb: Function) {
-    let tmp = userToken[uid];
-    if (!tmp) {
-        cb(null, false);
-    } else {
-        clearTimeout(tmp.timer);
-        delete userToken[uid];
-        cb(null, tmp.token === token);
-    }
 }

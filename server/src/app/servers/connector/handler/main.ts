@@ -16,32 +16,30 @@ class Handler {
     // 登入
     entry(msg: any, session: Session, next: Function) {
         let self = this;
-        this.app.rpc.toServer("gate-server-1").gate.main.isTokenOK(msg.uid, msg.token, function (err: any, ok: boolean) {
-            if (err || !ok) {
+        self.mysql.query("select token, data from account where uid = ?", [msg.uid], function (err: any, res: any) {
+            if (err || res.length === 0) {
                 next({ "code": -1 });
                 return;
             }
-            self.mysql.query("select data from account where uid = ?", [msg.uid], function (err: any, res: any) {
-                if (err || res.length === 0) {
-                    next({ "code": -1 });
-                    return;
-                }
-                let data: string = res[0].data || "";
+            if (msg.token !== res[0].token) {
+                next({ "code": -2 });
+                return;
+            }
 
-                // 断开当前其他的所有该用户连接
-                self.app.sendMsgByUid("onKicked", null, [msg.uid]);
-                self.app.closeClient(msg.uid);
-                let cons = self.app.getServersByType("connector");
-                for (let i = 0; i < cons.length; i++) {
-                    if (cons[i].id !== self.app.serverId) {
-                        self.app.rpc.toServer(cons[i].id).connector.main.kickUser(msg.uid);
-                    }
+            let data: string = res[0].data || "";
+            // 断开当前其他的所有该用户连接
+            self.app.sendMsgByUid("onKicked", null, [msg.uid]);
+            self.app.closeClient(msg.uid);
+            let cons = self.app.getServersByType("connector");
+            for (let i = 0; i < cons.length; i++) {
+                if (cons[i].id !== self.app.serverId) {
+                    self.app.rpc.toServer(cons[i].id).connector.main.kickUser(msg.uid);
                 }
+            }
 
-                // 绑定该连接
-                session.bind(msg.uid);
-                next({ "code": 0, "data": data });
-            });
+            // 绑定该连接
+            session.bind(msg.uid);
+            next({ "code": 0, "data": data });
         });
     }
 
