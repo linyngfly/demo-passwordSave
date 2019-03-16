@@ -65,7 +65,6 @@ public class Main : MonoBehaviour
 
     void InitData(bool isChange)
     {
-        Debug.Log(isChange);
         if (!isChange)
         {
             return;
@@ -352,7 +351,6 @@ public class Main : MonoBehaviour
     /// </summary>
     void Connect_svr()
     {
-        Debug.Log("连接服务器");
         SocketClient.Connect(PlayerData.host, PlayerData.port);
     }
 

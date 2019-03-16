@@ -9,7 +9,7 @@ app.set_encodeDecodeConfig({ "decode": decode });
 
 app.configure("connector", function () {
     //"ws" for cocos creator,  "net" for unity
-    app.set_connectorConfig({ connector: "net", heartbeat: 10 });
+    app.set_connectorConfig({ connector: "net", heartbeat: 5 });
     app.set("mysql", new mysqlClient(mysqlConfig));
 });
 
@@ -19,8 +19,10 @@ app.configure("gate", function () {
 });
 
 
-app.onLog(function (filename: string, level: string, info: string) {
-    // console.log(level, filename, info);
+app.onLog(function (level: string, filename: string, info: string) {
+    if (level == "error") {
+        console.log(level, filename, info);
+    }
 });
 
 app.start();

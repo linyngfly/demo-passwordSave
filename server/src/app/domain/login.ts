@@ -101,6 +101,9 @@ export function loginHttpStart(_app: Application) {
 
 function getUserNum() {
     let cons = app.getServersByType("connector");
+    if(!cons){
+        return;
+    }
     for (let i = 0; i < cons.length; i++) {
         rpcGetNum(cons[i].id);
     }
@@ -126,7 +129,7 @@ function rpcGetNum(serverId: string) {
 
 function setMinUserIp() {
     let cons = app.getServersByType("connector");
-    if (cons.length === 0) {
+    if (!cons || cons.length === 0) {
         return;
     }
     let minNum = cons[0].userNum || 0;

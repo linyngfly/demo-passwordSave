@@ -84,6 +84,7 @@ public static class SocketClient
         {
             nowSocket.DisConnect();
         }
+        msgCache.Clear();
     }
 
     /// <summary>
@@ -151,6 +152,7 @@ public static class SocketClient
         private Socket mySocket = null;         //原生socket
         private bool isDead = false;            //是否已被弃用
         private Timer heartbeatTimer = null;    // 心跳
+        private Timer heartbeatTimeoutTimer = null;    // 心跳回应超时
 
         public void DisConnect()
         {
@@ -158,10 +160,15 @@ public static class SocketClient
             {
                 nowSocket = null;
                 isDead = true;
-                SocketClose();
                 if (heartbeatTimer != null)
                 {
-                    heartbeatTimer.Close();
+                    heartbeatTimer.Enabled = false;
+                    heartbeatTimer.Dispose();
+                }
+                if (heartbeatTimeoutTimer != null)
+                {
+                    heartbeatTimeoutTimer.Enabled = false;
+                    heartbeatTimeoutTimer.Dispose();
                 }
                 try
                 {
@@ -170,7 +177,7 @@ public static class SocketClient
                 }
                 catch (Exception e)
                 {
-                    Debug.Log(e.ToString());
+                    Debug.Log(e);
                 }
             }
         }
@@ -184,15 +191,23 @@ public static class SocketClient
             }
             catch (Exception e)
             {
-                Debug.Log(e.ToString());
+                Debug.Log(e);
                 SocketClose();
             }
         }
 
         public void Connect(string host, int port)
         {
-            mySocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            mySocket.BeginConnect(host, port, AsyncConnectCallback, mySocket);
+            try
+            {
+                mySocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                mySocket.BeginConnect(host, port, AsyncConnectCallback, mySocket);
+            }
+            catch (Exception e)
+            {
+                Debug.Log(e);
+                SocketClose();
+            }
         }
 
         private void AsyncConnectCallback(IAsyncResult result)
@@ -214,7 +229,7 @@ public static class SocketClient
             }
             catch (Exception e)
             {
-                Debug.Log(e.ToString());
+                Debug.Log(e);
                 SocketClose();
             }
         }
@@ -252,7 +267,7 @@ public static class SocketClient
             }
             catch (Exception e)
             {
-                Debug.Log(e.ToString());
+                Debug.Log(e);
                 SocketClose();
             }
         }
@@ -294,6 +309,7 @@ public static class SocketClient
 
                     if (tmpBytes[0] == 2)   // 自定义消息
                     {
+
                         SocketMsg msg = new SocketMsg();
                         msg.msgId = tmpBytes[1];
                         msg.msg = Encoding.UTF8.GetString(tmpBytes.GetRange(2, tmpBytes.Count - 2).ToArray());
@@ -303,6 +319,13 @@ public static class SocketClient
                     {
                         Proto_Handshake handshakeMsg = JsonUtility.FromJson<Proto_Handshake>(Encoding.UTF8.GetString(tmpBytes.GetRange(1, tmpBytes.Count - 1).ToArray()));
                         DealHandshake(handshakeMsg);
+                    }
+                    else if (tmpBytes[0] == 3)  // 心跳回调
+                    {
+                        if (heartbeatTimeoutTimer != null)
+                        {
+                            heartbeatTimeoutTimer.Stop();
+                        }
                     }
                 }
             }
@@ -317,6 +340,11 @@ public static class SocketClient
                 heartbeatTimer.Elapsed += SendHeartbeat;
                 heartbeatTimer.Interval = msg.heartbeat * 1000;
                 heartbeatTimer.Enabled = true;
+
+                heartbeatTimeoutTimer = new Timer();
+                heartbeatTimeoutTimer.Elapsed += HeartbeatTimeout;
+                heartbeatTimeoutTimer.AutoReset = false;
+                heartbeatTimeoutTimer.Interval = 4 * 1000;
             }
             route = new List<string>();
             for (int i = 0; i < msg.route.Length; i++)
@@ -340,6 +368,7 @@ public static class SocketClient
             try
             {
                 mySocket.BeginSend(bytes, 0, bytes.Length, SocketFlags.None, null, null);
+                heartbeatTimeoutTimer.Start();
             }
             catch (Exception e1)
             {
@@ -347,6 +376,11 @@ public static class SocketClient
                 SocketClose();
             }
 
+        }
+
+        private void HeartbeatTimeout(object source, ElapsedEventArgs e)
+        {
+            SocketClose();
         }
 
         private void SocketClose()
