@@ -1,7 +1,16 @@
 import { createApp, Application, Session } from "mydog"
+
+import * as log4js from "log4js";
+log4js.configure({
+    appenders: { mydog: { type: 'file', filename: 'mydog.log' }, console: { type: "console" } },
+    categories: { default: { appenders: ['mydog', "console"], level: 'all' } }
+});
+export let infolog = log4js.getLogger("mydog");
+
 import mysqlClient from "./app/domain/mysql";
 import { mysqlConfig } from "./app/domain/dbConfig";
 import { loginHttpStart } from "./app/domain/login";
+
 
 let app = createApp();
 
@@ -20,20 +29,18 @@ app.configure("gate", function () {
 
 
 app.onLog(function (level: string, filename: string, info: string) {
-    if (level == "error") {
-        console.log(level, filename, info);
-    }
+    infolog.error(level, filename, info);
+
 });
 
 app.start();
 
 
 process.on("uncaughtException", function (err: any) {
-    console.log(err)
+    infolog.error("uncaughtException", err);
 })
 
 function decode(cmdId: number, msgBuf: Buffer): any {
-    console.log(app.routeConfig[cmdId]);
-    // console.log(JSON.parse(msgBuf as any));
+    infolog.error(app.routeConfig[cmdId]);
     return JSON.parse(msgBuf as any);
 }

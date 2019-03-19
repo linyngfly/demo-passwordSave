@@ -2,6 +2,7 @@ import mysqlClient from "./mysql";
 import * as http from "http"
 import * as querystring from "querystring"
 import { Application } from "mydog";
+import { infolog } from "../../app";
 
 
 
@@ -64,6 +65,7 @@ function callback(response: http.ServerResponse) {
         if (data === undefined) {
             data = null;
         }
+        infolog.debug(data);
         response.end(JSON.stringify(data));
     }
 }
@@ -82,17 +84,17 @@ export function loginHttpStart(_app: Application) {
         });
         request.on("end", function () {
             let body = querystring.parse(msg) as any;
-            console.log(body);
+            infolog.debug(body);
             if (body && body.method && msgHandler[body.method]) {
                 msgHandler[body.method](body, callback(response));
             }
         });
     });
     server.listen(PORT, function () {
-        console.log("--- login server (http)  running at port: " + PORT + ".");
+        infolog.info("--- login server (http)  running at port: " + PORT + ".");
     });
     server.on("error", function (err) {
-        console.log("--- login server error::", err.message);
+        infolog.info("--- login server error::", err.message);
     });
 
     setInterval(getUserNum, 5 * 1000);
@@ -101,7 +103,7 @@ export function loginHttpStart(_app: Application) {
 
 function getUserNum() {
     let cons = app.getServersByType("connector");
-    if(!cons){
+    if (!cons) {
         return;
     }
     for (let i = 0; i < cons.length; i++) {

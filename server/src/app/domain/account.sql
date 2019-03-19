@@ -25,6 +25,7 @@ CREATE TABLE `account` (
   `password` varchar(40) CHARACTER SET utf8 DEFAULT NULL,
   `regtime` datetime DEFAULT NULL,
   `data` text CHARACTER SET utf8,
+  `token` int(10) DEFAULT NULL,
   PRIMARY KEY (`uid`),
   KEY `username` (`username`)
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=latin1;
