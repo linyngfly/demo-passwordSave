@@ -1,5 +1,5 @@
 import { Application, Session } from "mydog";
-import mysqlClient from "../../../domain/mysql";
+import mysqlClient from "../../../app/domain/mysql";
 
 export default function (app: Application) {
     return new Handler(app);
