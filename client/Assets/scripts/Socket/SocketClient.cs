@@ -14,6 +14,13 @@ public static class SocketClient
     private static List<string> route = new List<string>();                                           //路由数组
     private static Dictionary<int, Action<string>> handlers = new Dictionary<int, Action<string>>();  //路由处理函数
     private static List<SocketMsg> msgCache = new List<SocketMsg>();                                  //缓存的消息列表
+    private static object lockObj = new object();
+
+    enum SocketOpenOrClose
+    {
+        open = -1,
+        close = -2
+    }
 
     /// <summary>
     /// 注册路由
@@ -25,7 +32,7 @@ public static class SocketClient
         int index = route.IndexOf(cmd);
         if (index == -1)
         {
-            Debug.Log("cmd not exists: " + cmd);
+            Debug.LogWarning("cmd not exists: " + cmd);
             return;
         }
         handlers[index] = handler;
@@ -38,6 +45,11 @@ public static class SocketClient
     public static void RemoveHandler(string cmd)
     {
         int index = route.IndexOf(cmd);
+        if (index == -1)
+        {
+            Debug.LogWarning("cmd not exists: " + cmd);
+            return;
+        }
         handlers.Remove(index);
     }
 
@@ -47,7 +59,7 @@ public static class SocketClient
     /// <param name="handler">回调函数</param>
     public static void OnClose(Action<string> handler)
     {
-        handlers[-2] = handler;
+        handlers[(int)SocketOpenOrClose.close] = handler;
     }
 
     /// <summary>
@@ -55,7 +67,7 @@ public static class SocketClient
     /// </summary>
     public static void OffClose()
     {
-        handlers.Remove(-2);
+        handlers.Remove((int)SocketOpenOrClose.close);
     }
 
     /// <summary>
@@ -64,7 +76,7 @@ public static class SocketClient
     /// <param name="handler">回调函数</param>
     public static void OnOpen(Action<string> handler)
     {
-        handlers[-1] = handler;
+        handlers[(int)SocketOpenOrClose.open] = handler;
     }
 
     /// <summary>
@@ -72,7 +84,7 @@ public static class SocketClient
     /// </summary>
     public static void OffOpen()
     {
-        handlers.Remove(-1);
+        handlers.Remove((int)SocketOpenOrClose.open);
     }
 
     /// <summary>
@@ -84,7 +96,10 @@ public static class SocketClient
         {
             nowSocket.DisConnect();
         }
-        msgCache.Clear();
+        lock (lockObj)
+        {
+            msgCache.Clear();
+        }
     }
 
     /// <summary>
@@ -135,13 +150,16 @@ public static class SocketClient
     /// </summary>
     public static void ReadMsg()
     {
-        if (msgCache.Count > 0)
+        lock (lockObj)
         {
-            SocketMsg msg = msgCache[0];
-            msgCache.RemoveAt(0);
-            if (handlers.ContainsKey(msg.msgId))
+            if (msgCache.Count > 0)
             {
-                handlers[msg.msgId](msg.msg);
+                SocketMsg msg = msgCache[0];
+                msgCache.RemoveAt(0);
+                if (handlers.ContainsKey(msg.msgId))
+                {
+                    handlers[msg.msgId](msg.msg);
+                }
             }
         }
     }
@@ -224,7 +242,7 @@ public static class SocketClient
                 bytes[1] = 1 >> 16 & 0xff;
                 bytes[2] = 1 >> 8 & 0xff;
                 bytes[3] = 1 & 0xff;
-                bytes[4] = 1 & 0xff;
+                bytes[4] = 2 & 0xff;
                 mySocket.BeginSend(bytes, 0, bytes.Length, SocketFlags.None, null, null);
             }
             catch (Exception e)
@@ -237,13 +255,14 @@ public static class SocketClient
         private byte[] Encode(int cmd, string data)
         {
             byte[] byteMsg = Encoding.UTF8.GetBytes(data);
-            int len = byteMsg.Length + 2;
+            int len = byteMsg.Length + 3;
             List<byte> byteSource = new List<byte>();
             byteSource.Add((byte)(len >> 24 & 0xff));
             byteSource.Add((byte)(len >> 16 & 0xff));
             byteSource.Add((byte)(len >> 8 & 0xff));
             byteSource.Add((byte)(len & 0xff));
-            byteSource.Add((byte)(3 & 0xff));
+            byteSource.Add((byte)(1 & 0xff));
+            byteSource.Add((byte)(cmd >> 8 & 0xff));
             byteSource.Add((byte)(cmd & 0xff));
             byteSource.AddRange(byteMsg);
             return byteSource.ToArray();
@@ -307,29 +326,44 @@ public static class SocketClient
                     List<byte> tmpBytes = msgBytes;
                     msgBytes = new List<byte>();
 
-                    if (tmpBytes[0] == 2)   // 自定义消息
-                    {
-
-                        SocketMsg msg = new SocketMsg();
-                        msg.msgId = tmpBytes[1];
-                        msg.msg = Encoding.UTF8.GetString(tmpBytes.GetRange(2, tmpBytes.Count - 2).ToArray());
-                        pushMsg(msg);
-                    }
-                    else if (tmpBytes[0] == 1)   // 握手回调
-                    {
-                        Proto_Handshake handshakeMsg = JsonUtility.FromJson<Proto_Handshake>(Encoding.UTF8.GetString(tmpBytes.GetRange(1, tmpBytes.Count - 1).ToArray()));
-                        DealHandshake(handshakeMsg);
-                    }
-                    else if (tmpBytes[0] == 3)  // 心跳回调
-                    {
-                        if (heartbeatTimeoutTimer != null)
-                        {
-                            heartbeatTimeoutTimer.Stop();
-                        }
-                    }
+                    HandleMsg(tmpBytes);
                 }
             }
 
+        }
+
+        private void HandleMsg(List<byte> tmpBytes)
+        {
+
+            try
+            {
+
+                if (tmpBytes[0] == 1)   // 自定义消息
+                {
+                    SocketMsg msg = new SocketMsg();
+                    msg.msgId = (tmpBytes[1] << 8) | tmpBytes[2];
+                    msg.msg = Encoding.UTF8.GetString(tmpBytes.GetRange(3, tmpBytes.Count - 3).ToArray());
+                    pushMsg(msg);
+                }
+                else if (tmpBytes[0] == 2)   // 握手回调
+                {
+                    string tmpStr = Encoding.UTF8.GetString(tmpBytes.GetRange(1, tmpBytes.Count - 1).ToArray());
+                    Proto_Handshake handshakeMsg = JsonUtility.FromJson<Proto_Handshake>(tmpStr);
+                    DealHandshake(handshakeMsg);
+                }
+                else if (tmpBytes[0] == 3)  // 心跳回调
+                {
+                    if (heartbeatTimeoutTimer != null)
+                    {
+                        heartbeatTimeoutTimer.Stop();
+                    }
+                }
+            }
+            catch (Exception e1)
+            {
+                Debug.Log(e1);
+                SocketClose();
+            }
         }
 
         private void DealHandshake(Proto_Handshake msg)
@@ -352,7 +386,7 @@ public static class SocketClient
                 route.Add(msg.route[i]);
             }
             SocketMsg openMsg = new SocketMsg();
-            openMsg.msgId = -1;
+            openMsg.msgId = (int)SocketOpenOrClose.open;
             pushMsg(openMsg);
         }
 
@@ -364,7 +398,7 @@ public static class SocketClient
             bytes[1] = 1 >> 16 & 0xff;
             bytes[2] = 1 >> 8 & 0xff;
             bytes[3] = 1 & 0xff;
-            bytes[4] = 2 & 0xff;
+            bytes[4] = 3 & 0xff;
             try
             {
                 mySocket.BeginSend(bytes, 0, bytes.Length, SocketFlags.None, null, null);
@@ -388,14 +422,17 @@ public static class SocketClient
             if (!isDead)
             {
                 SocketMsg msg = new SocketMsg();
-                msg.msgId = -2;
+                msg.msgId = (int)SocketOpenOrClose.close;
                 pushMsg(msg);
                 DisConnect();
             }
         }
         private void pushMsg(SocketMsg msg)
         {
-            msgCache.Add(msg);
+            lock (lockObj)
+            {
+                msgCache.Add(msg);
+            }
         }
     }
 

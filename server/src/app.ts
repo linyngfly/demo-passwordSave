@@ -1,4 +1,4 @@
-import { createApp, Application, Session } from "mydog"
+import { createApp, Application, Session, connector } from "mydog"
 
 import * as log4js from "log4js";
 log4js.configure({
@@ -14,11 +14,11 @@ import { loginHttpStart } from "./app/domain/login";
 
 let app = createApp();
 
-app.set_encodeDecodeConfig({ "decode": decode });
+app.setEncodeDecodeConfig({ "msgDecode": msgDecode });
+
+app.setConnectorConfig({ "connector": connector.connectorTcp, "heartbeat": 5 });
 
 app.configure("connector", function () {
-    //"ws" for cocos creator,  "net" for unity
-    app.set_connectorConfig({ connector: "net", heartbeat: 5 });
     app.set("mysql", new mysqlClient(mysqlConfig));
 });
 
@@ -28,8 +28,8 @@ app.configure("gate", function () {
 });
 
 
-app.onLog(function (level: string, filename: string, info: string) {
-    infolog.error(level, filename, info);
+app.onLog(function (level: string, info: string) {
+    infolog.error(level, info);
 
 });
 
@@ -40,7 +40,7 @@ process.on("uncaughtException", function (err: any) {
     infolog.error("uncaughtException", err);
 })
 
-function decode(cmdId: number, msgBuf: Buffer): any {
+function msgDecode(cmdId: number, msgBuf: Buffer): any {
     infolog.error(app.routeConfig[cmdId]);
     return JSON.parse(msgBuf as any);
 }
