@@ -114,7 +114,7 @@ function getUserNum() {
 
 function rpcGetNum(serverId: string) {
     try {
-        app.rpc.toServer(serverId).connector.main.getUserNum(function (err: any, num: number) {
+        app.rpc(serverId).connector.main.getUserNum(function (err: any, num: number) {
             if (err) {
                 return;
             }

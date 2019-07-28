@@ -33,7 +33,7 @@ class Handler {
             let cons = self.app.getServersByType("connector");
             for (let i = 0; i < cons.length; i++) {
                 if (cons[i].id !== self.app.serverId) {
-                    self.app.rpc.toServer(cons[i].id).connector.main.kickUser(msg.uid);
+                    self.app.rpc(cons[i].id).connector.main.kickUser(msg.uid);
                 }
             }
 
